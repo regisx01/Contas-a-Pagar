@@ -111,6 +111,9 @@ main {
   gap: 0.75rem;
   margin-bottom: 1.5rem;
 }
+.summary-grid-2 {
+  grid-template-columns: 1fr;
+}
 
 .card {
   background: var(--surface);
@@ -232,7 +235,34 @@ main {
 .filters {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.subtotal-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--primary);
+  color: white;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  margin-bottom: 0.75rem;
+  box-shadow: var(--shadow);
+}
+.subtotal-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.subtotal-meta {
+  font-size: 0.8rem;
+  opacity: 0.85;
+  flex: 1;
+}
+.subtotal-valor {
+  font-size: 1.1rem;
+  font-weight: 700;
 }
 .filters select {
   flex: 1;
@@ -359,5 +389,6 @@ main {
 
 @media (min-width: 600px) {
   .summary-grid { grid-template-columns: repeat(4, 1fr); }
+  .summary-grid-2 { grid-template-columns: repeat(2, 1fr); }
   .card-value { font-size: 1.4rem; }
 }

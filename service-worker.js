@@ -1,5 +1,5 @@
 /* Service Worker - Minhas Contas */
-const CACHE_VERSION = 'minhas-contas-v1';
+const CACHE_VERSION = 'minhas-contas-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,8 @@ const ASSETS = [
   './icons/icon-512.png',
   './icons/icon.svg',
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js',
+  'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js',
+  'https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js',
 ];
 
 self.addEventListener('install', (event) => {

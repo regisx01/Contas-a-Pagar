@@ -31,8 +31,8 @@ function openDB() {
   });
 }
 
-function tx(mode = 'readonly') {
-  return db.transaction(STORE, mode).objectStore(STORE);
+function tx(mode) {
+  return db.transaction(STORE, mode || 'readonly').objectStore(STORE);
 }
 
 function dbAdd(conta) {
@@ -82,7 +82,7 @@ const fmtMoney = (v) =>
 const fmtDate = (iso) => {
   if (!iso) return '';
   const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y}`;
+  return d + '/' + m + '/' + y;
 };
 
 const todayISO = () => {
@@ -104,10 +104,24 @@ function statusOf(conta) {
   return 'pendente';
 }
 
-function showToast(msg, type = '') {
+function statusLabel(c) {
+  const st = statusOf(c);
+  if (st === 'paga') return 'Paga';
+  if (st === 'vencida') return 'Vencida';
+  if (st === 'proxima') return 'A vencer';
+  return 'Pendente';
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, (m) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[m]));
+}
+
+function showToast(msg, type) {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.className = 'toast ' + type;
+  t.className = 'toast ' + (type || '');
   setTimeout(() => t.classList.add('hidden'), 2800);
 }
 
@@ -125,6 +139,10 @@ function setupTabs() {
       if (target === 'lista') renderLista();
     });
   });
+}
+
+function goTab(name) {
+  document.querySelector('.tab[data-tab="' + name + '"]').click();
 }
 
 /* ---------- Form ---------- */
@@ -151,7 +169,6 @@ function setupForm() {
     try {
       if (id) {
         conta.id = parseInt(id);
-        // preserve status existente se já pago
         const all = await dbGetAll();
         const old = all.find((c) => c.id === conta.id);
         if (old) {
@@ -183,10 +200,6 @@ function setupForm() {
   });
 }
 
-function goTab(name) {
-  document.querySelector(`.tab[data-tab="${name}"]`).click();
-}
-
 function editarConta(c) {
   document.getElementById('conta-id').value = c.id;
   document.getElementById('conta-descricao').value = c.descricao;
@@ -203,7 +216,6 @@ async function marcarPaga(c) {
   c.pagaEm = new Date().toISOString();
   await dbPut(c);
 
-  // Se recorrente, criar a próxima do mês seguinte
   if (c.recorrente) {
     const d = new Date(c.vencimento + 'T00:00:00');
     d.setMonth(d.getMonth() + 1);
@@ -233,7 +245,7 @@ async function desmarcarPaga(c) {
 }
 
 async function excluirConta(c) {
-  if (!confirm(`Excluir "${c.descricao}"?`)) return;
+  if (!confirm('Excluir "' + c.descricao + '"?')) return;
   await dbDelete(c.id);
   showToast('Conta excluída.');
   await refreshAll();
@@ -244,39 +256,32 @@ function billItemHTML(c) {
   const st = statusOf(c);
   const diff = daysBetween(c.vencimento);
   let prazoTxt = '';
-  if (st === 'paga') prazoTxt = `Pago em ${fmtDate((c.pagaEm || '').slice(0, 10))}`;
-  else if (diff < 0) prazoTxt = `Venceu há ${-diff} dia(s)`;
+  if (st === 'paga') prazoTxt = 'Pago em ' + fmtDate((c.pagaEm || '').slice(0, 10));
+  else if (diff < 0) prazoTxt = 'Venceu há ' + (-diff) + ' dia(s)';
   else if (diff === 0) prazoTxt = 'Vence hoje';
-  else prazoTxt = `Em ${diff} dia(s)`;
+  else prazoTxt = 'Em ' + diff + ' dia(s)';
 
-  return `
-    <li class="bill-item ${st}" data-id="${c.id}">
-      <div class="bill-info">
-        <div class="bill-desc">${escapeHtml(c.descricao)}${c.recorrente ? ' 🔁' : ''}</div>
-        <div class="bill-meta">
-          <span>📅 ${fmtDate(c.vencimento)}</span>
-          <span class="bill-categoria">${escapeHtml(c.categoria)}</span>
-          <span>${prazoTxt}</span>
-        </div>
-      </div>
-      <div class="bill-value">${fmtMoney(c.valor)}</div>
-      <div class="bill-actions">
-        ${
-          st === 'paga'
-            ? `<button class="btn-mini warn" data-act="desmarcar">↩ Desmarcar</button>`
-            : `<button class="btn-mini primary" data-act="pagar">✓ Pagar</button>`
-        }
-        <button class="btn-mini" data-act="editar">✎ Editar</button>
-        <button class="btn-mini danger" data-act="excluir">🗑</button>
-      </div>
-    </li>
-  `;
-}
+  const acoes = st === 'paga'
+    ? '<button class="btn-mini warn" data-act="desmarcar">↩ Desmarcar</button>'
+    : '<button class="btn-mini primary" data-act="pagar">✓ Pagar</button>';
 
-function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, (m) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  }[m]));
+  return ''
+    + '<li class="bill-item ' + st + '" data-id="' + c.id + '">'
+    +   '<div class="bill-info">'
+    +     '<div class="bill-desc">' + escapeHtml(c.descricao) + (c.recorrente ? ' 🔁' : '') + '</div>'
+    +     '<div class="bill-meta">'
+    +       '<span>📅 ' + fmtDate(c.vencimento) + '</span>'
+    +       '<span class="bill-categoria">' + escapeHtml(c.categoria) + '</span>'
+    +       '<span>' + prazoTxt + '</span>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="bill-value">' + fmtMoney(c.valor) + '</div>'
+    +   '<div class="bill-actions">'
+    +     acoes
+    +     '<button class="btn-mini" data-act="editar">✎ Editar</button>'
+    +     '<button class="btn-mini danger" data-act="excluir">🗑</button>'
+    +   '</div>'
+    + '</li>';
 }
 
 function bindListEvents(ul, contas) {
@@ -300,33 +305,29 @@ async function renderDashboard() {
   const hoje = new Date(todayISO() + 'T00:00:00');
   const mesAtual = hoje.getMonth();
   const anoAtual = hoje.getFullYear();
+  const chaveMesAtual = anoAtual * 12 + mesAtual;
 
-  let sumProx = 0, cntProx = 0;
-  let sumVenc = 0, cntVenc = 0;
-  let sumPagas = 0, cntPagas = 0;
-  let sumMes = 0, cntMes = 0;
+  let sumVencerMes = 0, cntVencerMes = 0;
+  let sumProxMeses = 0, cntProxMeses = 0;
 
   contas.forEach((c) => {
+    if (c.status === 'paga') return;
     const venc = new Date(c.vencimento + 'T00:00:00');
-    const st = statusOf(c);
-    if (st === 'proxima') { sumProx += c.valor; cntProx++; }
-    if (st === 'vencida') { sumVenc += c.valor; cntVenc++; }
-    if (venc.getMonth() === mesAtual && venc.getFullYear() === anoAtual) {
-      sumMes += c.valor; cntMes++;
-      if (st === 'paga') { sumPagas += c.valor; cntPagas++; }
+    const chaveMes = venc.getFullYear() * 12 + venc.getMonth();
+    if (chaveMes === chaveMesAtual) {
+      sumVencerMes += c.valor;
+      cntVencerMes++;
+    } else if (chaveMes > chaveMesAtual) {
+      sumProxMeses += c.valor;
+      cntProxMeses++;
     }
   });
 
-  document.getElementById('sum-proximas').textContent = fmtMoney(sumProx);
-  document.getElementById('cnt-proximas').textContent = `${cntProx} conta(s)`;
-  document.getElementById('sum-vencidas').textContent = fmtMoney(sumVenc);
-  document.getElementById('cnt-vencidas').textContent = `${cntVenc} conta(s)`;
-  document.getElementById('sum-pagas').textContent = fmtMoney(sumPagas);
-  document.getElementById('cnt-pagas').textContent = `${cntPagas} conta(s)`;
-  document.getElementById('sum-mes').textContent = fmtMoney(sumMes);
-  document.getElementById('cnt-mes').textContent = `${cntMes} conta(s)`;
+  document.getElementById('sum-vencer-mes').textContent = fmtMoney(sumVencerMes);
+  document.getElementById('cnt-vencer-mes').textContent = cntVencerMes + ' conta(s)';
+  document.getElementById('sum-prox-meses').textContent = fmtMoney(sumProxMeses);
+  document.getElementById('cnt-prox-meses').textContent = cntProxMeses + ' conta(s)';
 
-  // Próximos vencimentos (não pagas, ordenadas por data)
   const proximas = contas
     .filter((c) => c.status !== 'paga')
     .sort((a, b) => a.vencimento.localeCompare(b.vencimento))
@@ -346,12 +347,11 @@ async function renderLista() {
   const statusFilter = document.getElementById('filter-status').value;
   const catFilter = document.getElementById('filter-categoria').value;
 
-  // popular categorias
   const cats = [...new Set(contas.map((c) => c.categoria))].sort();
   const catSel = document.getElementById('filter-categoria');
   const current = catSel.value;
   catSel.innerHTML = '<option value="">Todas categorias</option>' +
-    cats.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    cats.map((c) => '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>').join('');
   catSel.value = current;
 
   let filtered = contas;
@@ -362,6 +362,11 @@ async function renderLista() {
     filtered = filtered.filter((c) => c.categoria === catFilter);
   }
   filtered.sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+
+  // Subtotal do filtro
+  const subtotal = filtered.reduce((s, c) => s + Number(c.valor || 0), 0);
+  document.getElementById('subtotal-cnt').textContent = filtered.length;
+  document.getElementById('subtotal-valor').textContent = fmtMoney(subtotal);
 
   const ul = document.getElementById('list-contas');
   if (filtered.length === 0) {
@@ -383,7 +388,6 @@ async function renderCharts() {
     return d.getMonth() === mes && d.getFullYear() === ano;
   });
 
-  // Por categoria
   const porCat = {};
   doMes.forEach((c) => {
     porCat[c.categoria] = (porCat[c.categoria] || 0) + c.valor;
@@ -404,7 +408,6 @@ async function renderCharts() {
     options: { plugins: { legend: { position: 'bottom' } } },
   });
 
-  // Status (pagas x pendentes)
   const pagas = doMes.filter((c) => c.status === 'paga').reduce((s, c) => s + c.valor, 0);
   const pendentes = doMes.filter((c) => c.status !== 'paga').reduce((s, c) => s + c.valor, 0);
 
@@ -424,7 +427,6 @@ async function renderCharts() {
     },
   });
 
-  // Histórico 6 meses
   const meses = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(ano, mes - i, 1);
@@ -463,15 +465,176 @@ function setupFilters() {
   document.getElementById('filter-categoria').addEventListener('change', renderLista);
 }
 
+/* ---------- Exportar PDF ---------- */
+async function exportarPDF() {
+  try {
+    const jsPDFCtor = window.jspdf && window.jspdf.jsPDF;
+    if (!jsPDFCtor) {
+      showToast('Biblioteca de PDF não carregada. Verifique a conexão.', 'error');
+      return;
+    }
+
+    const contas = await dbGetAll();
+    if (contas.length === 0) {
+      showToast('Nenhuma conta para exportar.', 'error');
+      return;
+    }
+
+    const doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 40;
+    let y;
+
+    // Cabeçalho
+    doc.setFillColor(37, 99, 235);
+    doc.rect(0, 0, pageW, 60, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Relatorio de Contas a Pagar', margin, 38);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const dataGeracao = new Date().toLocaleString('pt-BR');
+    doc.text('Gerado em: ' + dataGeracao, pageW - margin, 38, { align: 'right' });
+
+    y = 90;
+    doc.setTextColor(15, 23, 42);
+
+    // Resumo
+    const hoje = new Date(todayISO() + 'T00:00:00');
+    const chaveMesAtual = hoje.getFullYear() * 12 + hoje.getMonth();
+    let totalVencerMes = 0, cntVencerMes = 0;
+    let totalProxMeses = 0, cntProxMeses = 0;
+    let totalVencidas = 0, cntVencidas = 0;
+    let totalPagasMes = 0, cntPagasMes = 0;
+
+    contas.forEach((c) => {
+      const venc = new Date(c.vencimento + 'T00:00:00');
+      const chaveMes = venc.getFullYear() * 12 + venc.getMonth();
+      if (c.status === 'paga') {
+        if (chaveMes === chaveMesAtual) { totalPagasMes += c.valor; cntPagasMes++; }
+        return;
+      }
+      if (chaveMes === chaveMesAtual) { totalVencerMes += c.valor; cntVencerMes++; }
+      else if (chaveMes > chaveMesAtual) { totalProxMeses += c.valor; cntProxMeses++; }
+      else { totalVencidas += c.valor; cntVencidas++; }
+    });
+
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Resumo', margin, y);
+    y += 18;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    const resumoLinhas = [
+      ['Total a Vencer no Mes (' + cntVencerMes + ' conta(s))', fmtMoney(totalVencerMes)],
+      ['Total dos Proximos Meses (' + cntProxMeses + ' conta(s))', fmtMoney(totalProxMeses)],
+      ['Vencidas (' + cntVencidas + ' conta(s))', fmtMoney(totalVencidas)],
+      ['Pagas no Mes (' + cntPagasMes + ' conta(s))', fmtMoney(totalPagasMes)],
+    ];
+    resumoLinhas.forEach((linha) => {
+      doc.text(linha[0], margin, y);
+      doc.text(linha[1], pageW - margin, y, { align: 'right' });
+      y += 16;
+    });
+
+    y += 10;
+
+    // Por categoria (pendentes)
+    const porCat = {};
+    contas.forEach((c) => {
+      if (c.status === 'paga') return;
+      porCat[c.categoria] = (porCat[c.categoria] || 0) + c.valor;
+    });
+    const catRows = Object.entries(porCat)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, val]) => [cat, fmtMoney(val)]);
+
+    if (catRows.length > 0) {
+      doc.setFontSize(13);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Pendentes por categoria', margin, y);
+      y += 8;
+      doc.autoTable({
+        startY: y,
+        head: [['Categoria', 'Total']],
+        body: catRows,
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 10 },
+        headStyles: { fillColor: [37, 99, 235] },
+        columnStyles: { 1: { halign: 'right' } },
+      });
+      y = doc.lastAutoTable.finalY + 20;
+    }
+
+    // Tabela completa de contas
+    const contasOrdenadas = [...contas].sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+    const bodyRows = contasOrdenadas.map((c) => [
+      fmtDate(c.vencimento),
+      c.descricao,
+      c.categoria,
+      statusLabel(c),
+      fmtMoney(c.valor),
+    ]);
+    const totalGeral = contasOrdenadas.reduce((s, c) => s + c.valor, 0);
+
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Todas as contas', margin, y);
+    y += 8;
+    doc.autoTable({
+      startY: y,
+      head: [['Vencimento', 'Descricao', 'Categoria', 'Status', 'Valor']],
+      body: bodyRows,
+      foot: [[
+        { content: 'Total geral', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } },
+        { content: fmtMoney(totalGeral), styles: { halign: 'right', fontStyle: 'bold' } },
+      ]],
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 9, cellPadding: 4 },
+      headStyles: { fillColor: [37, 99, 235] },
+      footStyles: { fillColor: [226, 232, 240], textColor: 15 },
+      columnStyles: {
+        0: { cellWidth: 70 },
+        3: { cellWidth: 60 },
+        4: { halign: 'right', cellWidth: 80 },
+      },
+    });
+
+    // Rodape com numeracao
+    const totalPaginas = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPaginas; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(
+        'Pagina ' + i + ' de ' + totalPaginas + ' - Minhas Contas',
+        pageW / 2,
+        doc.internal.pageSize.getHeight() - 20,
+        { align: 'center' }
+      );
+    }
+
+    doc.save('relatorio-contas-' + todayISO() + '.pdf');
+    showToast('PDF gerado com sucesso!', 'success');
+  } catch (err) {
+    console.error(err);
+    showToast('Erro ao gerar PDF: ' + err.message, 'error');
+  }
+}
+
 /* ---------- Backup ---------- */
 function setupBackup() {
+  document.getElementById('btn-exportar-pdf').addEventListener('click', exportarPDF);
+
   document.getElementById('btn-exportar').addEventListener('click', async () => {
     const data = await dbGetAll();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `backup-contas-${todayISO()}.json`;
+    a.download = 'backup-contas-' + todayISO() + '.json';
     a.click();
     URL.revokeObjectURL(url);
     showToast('Backup exportado!', 'success');
@@ -483,34 +646,33 @@ function setupBackup() {
     try {
       const txt = await file.text();
       const data = JSON.parse(txt);
-      if (!Array.isArray(data)) throw new Error('Formato inválido');
-      if (!confirm(`Importar ${data.length} conta(s)? As atuais serão substituídas.`)) return;
+      if (!Array.isArray(data)) throw new Error('Formato invalido');
+      if (!confirm('Importar ' + data.length + ' conta(s)? As atuais serao substituidas.')) return;
       await dbClear();
       for (const c of data) {
-        delete c.id; // deixa gerar novo id
+        delete c.id;
         await dbAdd(c);
       }
       showToast('Backup importado!', 'success');
       await refreshAll();
     } catch (err) {
-      showToast('Arquivo inválido.', 'error');
+      showToast('Arquivo invalido.', 'error');
     }
     e.target.value = '';
   });
 
   document.getElementById('btn-limpar-tudo').addEventListener('click', async () => {
-    if (!confirm('Apagar TODAS as contas? Esta ação não pode ser desfeita.')) return;
+    if (!confirm('Apagar TODAS as contas? Esta acao nao pode ser desfeita.')) return;
     await dbClear();
     showToast('Todas as contas foram apagadas.');
     await refreshAll();
   });
 }
 
-/* ---------- Notificações ---------- */
+/* ---------- Notificacoes ---------- */
 async function setupNotifications() {
   if (!('Notification' in window)) return;
   if (Notification.permission === 'default') {
-    // pede permissão na primeira interação
     document.body.addEventListener('click', () => {
       if (Notification.permission === 'default') {
         Notification.requestPermission();
@@ -518,7 +680,6 @@ async function setupNotifications() {
     }, { once: true });
   }
   verificarVencimentos();
-  // verifica a cada 1h enquanto aberto
   setInterval(verificarVencimentos, 60 * 60 * 1000);
 }
 
@@ -531,16 +692,16 @@ async function verificarVencimentos() {
   contas.forEach((c) => {
     if (c.status === 'paga') return;
     const diff = daysBetween(c.vencimento);
-    if (diff < 0 || diff > 3) return; // só vencidas hoje ou próximas em 3 dias
+    if (diff < 0 || diff > 3) return;
     if (jaNotificado.includes(c.id)) return;
 
-    const titulo =
-      diff < 0 ? `⚠ Conta vencida: ${c.descricao}`
-      : diff === 0 ? `📌 Vence hoje: ${c.descricao}`
-      : `⏰ Vence em ${diff} dia(s): ${c.descricao}`;
+    let titulo;
+    if (diff < 0) titulo = 'Conta vencida: ' + c.descricao;
+    else if (diff === 0) titulo = 'Vence hoje: ' + c.descricao;
+    else titulo = 'Vence em ' + diff + ' dia(s): ' + c.descricao;
 
     new Notification(titulo, {
-      body: `${fmtMoney(c.valor)} — ${c.categoria}`,
+      body: fmtMoney(c.valor) + ' - ' + c.categoria,
       icon: 'icons/icon-192.png',
       badge: 'icons/icon-192.png',
       tag: 'conta-' + c.id,
