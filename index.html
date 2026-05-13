@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <meta name="description" content="App de contas a pagar - controle suas despesas com facilidade" />
+  <title>Minhas Contas</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <h1>💰 Minhas Contas</h1>
+      <button id="btn-install" class="btn-install hidden" title="Instalar app">Instalar</button>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="dashboard">Painel</button>
+      <button class="tab" data-tab="lista">Contas</button>
+      <button class="tab" data-tab="adicionar">+ Nova</button>
+      <button class="tab" data-tab="relatorios">Relatórios</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- DASHBOARD -->
+    <section id="tab-dashboard" class="tab-content active">
+      <div class="summary-grid">
+        <div class="card card-warning">
+          <div class="card-label">A vencer (7 dias)</div>
+          <div class="card-value" id="sum-proximas">R$ 0,00</div>
+          <div class="card-sub" id="cnt-proximas">0 contas</div>
+        </div>
+        <div class="card card-danger">
+          <div class="card-label">Vencidas</div>
+          <div class="card-value" id="sum-vencidas">R$ 0,00</div>
+          <div class="card-sub" id="cnt-vencidas">0 contas</div>
+        </div>
+        <div class="card card-success">
+          <div class="card-label">Pagas no mês</div>
+          <div class="card-value" id="sum-pagas">R$ 0,00</div>
+          <div class="card-sub" id="cnt-pagas">0 contas</div>
+        </div>
+        <div class="card card-info">
+          <div class="card-label">Total do mês</div>
+          <div class="card-value" id="sum-mes">R$ 0,00</div>
+          <div class="card-sub" id="cnt-mes">0 contas</div>
+        </div>
+      </div>
+
+      <h2 class="section-title">Próximos vencimentos</h2>
+      <ul id="list-proximos" class="bill-list"></ul>
+    </section>
+
+    <!-- LISTA -->
+    <section id="tab-lista" class="tab-content">
+      <div class="filters">
+        <select id="filter-status">
+          <option value="todas">Todas</option>
+          <option value="pendente">Pendentes</option>
+          <option value="paga">Pagas</option>
+          <option value="vencida">Vencidas</option>
+        </select>
+        <select id="filter-categoria">
+          <option value="">Todas categorias</option>
+        </select>
+      </div>
+      <ul id="list-contas" class="bill-list"></ul>
+    </section>
+
+    <!-- ADICIONAR -->
+    <section id="tab-adicionar" class="tab-content">
+      <form id="form-conta" class="form">
+        <input type="hidden" id="conta-id" />
+        <label>
+          Descrição
+          <input type="text" id="conta-descricao" required placeholder="Ex: Conta de luz" />
+        </label>
+        <label>
+          Valor (R$)
+          <input type="number" id="conta-valor" step="0.01" min="0" required placeholder="0,00" />
+        </label>
+        <label>
+          Data de vencimento
+          <input type="date" id="conta-vencimento" required />
+        </label>
+        <label>
+          Categoria
+          <select id="conta-categoria" required>
+            <option value="Moradia">Moradia</option>
+            <option value="Alimentação">Alimentação</option>
+            <option value="Transporte">Transporte</option>
+            <option value="Saúde">Saúde</option>
+            <option value="Educação">Educação</option>
+            <option value="Lazer">Lazer</option>
+            <option value="Cartão">Cartão de Crédito</option>
+            <option value="Serviços">Serviços</option>
+            <option value="Outros">Outros</option>
+          </select>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="conta-recorrente" />
+          Conta recorrente (mensal)
+        </label>
+        <label>
+          Observações
+          <textarea id="conta-obs" rows="2" placeholder="Opcional"></textarea>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Salvar</button>
+          <button type="button" id="btn-cancelar" class="btn btn-secondary">Limpar</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- RELATÓRIOS -->
+    <section id="tab-relatorios" class="tab-content">
+      <div class="chart-wrap">
+        <h3>Por categoria (mês atual)</h3>
+        <canvas id="chart-categoria"></canvas>
+      </div>
+      <div class="chart-wrap">
+        <h3>Pagas x Pendentes (mês atual)</h3>
+        <canvas id="chart-status"></canvas>
+      </div>
+      <div class="chart-wrap">
+        <h3>Histórico (últimos 6 meses)</h3>
+        <canvas id="chart-historico"></canvas>
+      </div>
+
+      <div class="export-actions">
+        <button id="btn-exportar" class="btn btn-secondary">📤 Exportar backup (JSON)</button>
+        <label class="btn btn-secondary" for="file-import">📥 Importar backup</label>
+        <input type="file" id="file-import" accept="application/json" hidden />
+        <button id="btn-limpar-tudo" class="btn btn-danger">🗑 Apagar tudo</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js').catch(console.error);
+      });
+    }
+  </script>
+</body>
+</html>
