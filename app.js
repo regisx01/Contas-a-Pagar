@@ -14,36 +14,42 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const firestoreDb = firebase.firestore();
-const COLLECTION = 'contas';
+const auth = firebase.auth();
 
+let currentUser = null;
+let appInitialized = false;
 let chartCategoria = null;
 let chartStatus = null;
 let chartHistorico = null;
 let deferredPrompt = null;
 
 /* ---------- Firestore helpers ---------- */
+function getCol() {
+  return firestoreDb.collection('users').doc(currentUser.uid).collection('contas');
+}
+
 async function dbAdd(conta) {
-  const ref = await firestoreDb.collection(COLLECTION).add(conta);
+  const ref = await getCol().add(conta);
   return ref.id;
 }
 
 async function dbPut(conta) {
   const { id, ...data } = conta;
-  await firestoreDb.collection(COLLECTION).doc(id).set(data);
+  await getCol().doc(id).set(data);
   return id;
 }
 
 async function dbDelete(id) {
-  await firestoreDb.collection(COLLECTION).doc(id).delete();
+  await getCol().doc(id).delete();
 }
 
 async function dbGetAll() {
-  const snapshot = await firestoreDb.collection(COLLECTION).get();
+  const snapshot = await getCol().get();
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }
 
 async function dbClear() {
-  const snapshot = await firestoreDb.collection(COLLECTION).get();
+  const snapshot = await getCol().get();
   const batch = firestoreDb.batch();
   snapshot.docs.forEach((doc) => batch.delete(doc.ref));
   await batch.commit();
@@ -702,6 +708,35 @@ function setupInstall() {
   });
 }
 
+/* ---------- Auth ---------- */
+function setupAuth() {
+  document.getElementById('btn-google-login').addEventListener('click', () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).catch(() => showToast('Erro ao fazer login.', 'error'));
+  });
+
+  document.getElementById('btn-logout').addEventListener('click', () => {
+    auth.signOut().then(() => location.reload());
+  });
+
+  auth.onAuthStateChanged(async (user) => {
+    currentUser = user;
+    const loginScreen = document.getElementById('login-screen');
+    if (user) {
+      loginScreen.classList.add('hidden');
+      document.getElementById('user-name').textContent = user.displayName || user.email;
+      document.getElementById('btn-logout').classList.remove('hidden');
+      if (!appInitialized) {
+        appInitialized = true;
+        await setupApp();
+      }
+    } else {
+      loginScreen.classList.remove('hidden');
+      document.getElementById('btn-logout').classList.add('hidden');
+    }
+  });
+}
+
 /* ---------- Init ---------- */
 async function refreshAll() {
   await renderDashboard();
@@ -711,7 +746,7 @@ async function refreshAll() {
   }
 }
 
-(async function init() {
+async function setupApp() {
   try {
     setupTabs();
     setupForm();
@@ -724,4 +759,8 @@ async function refreshAll() {
     console.error(err);
     showToast('Erro ao iniciar o app: ' + err.message, 'error');
   }
+}
+
+(function init() {
+  setupAuth();
 })();
