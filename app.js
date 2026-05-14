@@ -1,78 +1,52 @@
 /* ===========================================================
    Minhas Contas - App de Contas a Pagar (PWA)
-   Armazenamento local via IndexedDB
+   Armazenamento em nuvem via Firebase Firestore
    =========================================================== */
 
-const DB_NAME = 'minhas-contas-db';
-const DB_VERSION = 1;
-const STORE = 'contas';
+const firebaseConfig = {
+  apiKey: "AIzaSyBtiNj8LGnqAwpzGyGgDQ9uUavJNkRWRZ4",
+  authDomain: "contasapagar-3fbb0.firebaseapp.com",
+  projectId: "contasapagar-3fbb0",
+  storageBucket: "contasapagar-3fbb0.firebasestorage.app",
+  messagingSenderId: "98517519915",
+  appId: "1:98517519915:web:3a1cf70fe7f0091514e46e",
+};
 
-let db = null;
+firebase.initializeApp(firebaseConfig);
+const firestoreDb = firebase.firestore();
+const COLLECTION = 'contas';
+
 let chartCategoria = null;
 let chartStatus = null;
 let chartHistorico = null;
 let deferredPrompt = null;
 
-/* ---------- IndexedDB helpers ---------- */
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        const store = db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('vencimento', 'vencimento', { unique: false });
-        store.createIndex('status', 'status', { unique: false });
-        store.createIndex('categoria', 'categoria', { unique: false });
-      }
-    };
-    req.onsuccess = (e) => resolve(e.target.result);
-    req.onerror = (e) => reject(e.target.error);
-  });
+/* ---------- Firestore helpers ---------- */
+async function dbAdd(conta) {
+  const ref = await firestoreDb.collection(COLLECTION).add(conta);
+  return ref.id;
 }
 
-function tx(mode) {
-  return db.transaction(STORE, mode || 'readonly').objectStore(STORE);
+async function dbPut(conta) {
+  const { id, ...data } = conta;
+  await firestoreDb.collection(COLLECTION).doc(id).set(data);
+  return id;
 }
 
-function dbAdd(conta) {
-  return new Promise((resolve, reject) => {
-    const r = tx('readwrite').add(conta);
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-  });
+async function dbDelete(id) {
+  await firestoreDb.collection(COLLECTION).doc(id).delete();
 }
 
-function dbPut(conta) {
-  return new Promise((resolve, reject) => {
-    const r = tx('readwrite').put(conta);
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-  });
+async function dbGetAll() {
+  const snapshot = await firestoreDb.collection(COLLECTION).get();
+  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }
 
-function dbDelete(id) {
-  return new Promise((resolve, reject) => {
-    const r = tx('readwrite').delete(id);
-    r.onsuccess = () => resolve();
-    r.onerror = () => reject(r.error);
-  });
-}
-
-function dbGetAll() {
-  return new Promise((resolve, reject) => {
-    const r = tx().getAll();
-    r.onsuccess = () => resolve(r.result || []);
-    r.onerror = () => reject(r.error);
-  });
-}
-
-function dbClear() {
-  return new Promise((resolve, reject) => {
-    const r = tx('readwrite').clear();
-    r.onsuccess = () => resolve();
-    r.onerror = () => reject(r.error);
-  });
+async function dbClear() {
+  const snapshot = await firestoreDb.collection(COLLECTION).get();
+  const batch = firestoreDb.batch();
+  snapshot.docs.forEach((doc) => batch.delete(doc.ref));
+  await batch.commit();
 }
 
 /* ---------- Utils ---------- */
@@ -168,7 +142,7 @@ function setupForm() {
 
     try {
       if (id) {
-        conta.id = parseInt(id);
+        conta.id = id;
         const all = await dbGetAll();
         const old = all.find((c) => c.id === conta.id);
         if (old) {
@@ -289,7 +263,7 @@ function bindListEvents(ul, contas) {
     const btn = e.target.closest('button[data-act]');
     if (!btn) return;
     const li = e.target.closest('li[data-id]');
-    const id = parseInt(li.dataset.id);
+    const id = li.dataset.id;
     const c = contas.find((x) => x.id === id);
     if (!c) return;
     const act = btn.dataset.act;
@@ -402,7 +376,7 @@ async function renderCharts() {
       labels: catLabels.length ? catLabels : ['Sem dados'],
       datasets: [{
         data: catData.length ? catData : [1],
-        backgroundColor: ['#2563eb', '#16a34a', '#dc2626', '#f59e0b', '#0ea5e9', '#a855f7', '#ec4899', '#14b8a6', '#64748b'],
+        backgroundColor: ['#16a34a', '#15803d', '#dc2626', '#f59e0b', '#059669', '#a855f7', '#ec4899', '#14b8a6', '#64748b'],
       }],
     },
     options: { plugins: { legend: { position: 'bottom' } } },
@@ -449,8 +423,8 @@ async function renderCharts() {
       datasets: [{
         label: 'Total mensal',
         data: valores,
-        borderColor: '#2563eb',
-        backgroundColor: 'rgba(37,99,235,0.15)',
+        borderColor: '#16a34a',
+        backgroundColor: 'rgba(22,163,74,0.15)',
         fill: true,
         tension: 0.3,
       }],
@@ -486,7 +460,7 @@ async function exportarPDF() {
     let y;
 
     // Cabeçalho
-    doc.setFillColor(37, 99, 235);
+    doc.setFillColor(22, 163, 74);
     doc.rect(0, 0, pageW, 60, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(18);
@@ -562,7 +536,7 @@ async function exportarPDF() {
         body: catRows,
         margin: { left: margin, right: margin },
         styles: { fontSize: 10 },
-        headStyles: { fillColor: [37, 99, 235] },
+        headStyles: { fillColor: [22, 163, 74] },
         columnStyles: { 1: { halign: 'right' } },
       });
       y = doc.lastAutoTable.finalY + 20;
@@ -739,7 +713,6 @@ async function refreshAll() {
 
 (async function init() {
   try {
-    db = await openDB();
     setupTabs();
     setupForm();
     setupFilters();
